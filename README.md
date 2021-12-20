@@ -10,6 +10,6 @@ Example:
 cargo +nightly run "/Black MIDIs/tau2.5.9.mid" -transpose 10 -randomizeColors true -blackNotes false
 ```
 ### Preview
-![preview1](./Screenshot 2021-12-20 151721.jpg)
+![preview1](/preview_1.jpg)
 
-![preview2](./Screenshot 2021-12-20 151940.jpg)
+![preview2](/preview_2.jpg)
