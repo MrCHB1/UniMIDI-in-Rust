@@ -11,4 +11,5 @@ cargo +nightly run "/Black MIDIs/tau2.5.9.mid" -transpose 10 -randomizeColors tr
 ```
 ### Preview
 ![preview1](/Screenshot 2021-12-20 151721.jpg)
+
 ![preview2](/Screenshot 2021-12-20 151940.jpg)
