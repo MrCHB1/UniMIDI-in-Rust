@@ -9,3 +9,6 @@ cargo +nightly run <path/to/midi_file.mid> [-transpose N (default is 0, has to b
 Example:
 cargo +nightly run "/Black MIDIs/tau2.5.9.mid" -transpose 10 -randomizeColors true -blackNotes false
 ```
+### Preview
+![preview1](/Screenshot 2021-12-20 151721.jpg)
+![preview2](/Screenshot 2021-12-20 151940.jpg)
