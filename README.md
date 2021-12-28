@@ -7,7 +7,7 @@ If you have Cargo and Cargo Nightly installed, then you can head to this directo
 ```
 cargo +nightly run <path/to/midi_file.mid>
 ```
-##### Available Arguments
+#### Available Arguments
 ```
 [Visuals]
 -randomizeColors
