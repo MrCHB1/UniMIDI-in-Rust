@@ -15,17 +15,18 @@ use rand::thread_rng;
 use kdmapi::KDMAPI;
 
 fn main() {
+    //Get the list of arguments the user has included
     let args: Vec<String> = env::args().collect();
-
-    //println!("{:?}", kdmapi::is_kdmapi_available());
 
     println!("Loading MIDI...");
 
+    //Load the MIDI file and PPQ
     let file = MIDIFile::open_in_ram(&args[1], None).unwrap();
     let file2 = MIDIFile::open_in_ram(&args[1], None).unwrap();
     let ppq = file.ppq();
     let ppq2 = file2.ppq();
 
+    //Set default values for argument settings
     let mut transpose_value: i32 = 0;
     let mut playback_speed: f64 = 1.0;
     let mut randomize_colors = false;
@@ -36,6 +37,7 @@ fn main() {
 
     let mut color_index = [0,1,2,3,4,5,6,7];
    
+    //Check if the argument list contains these
     if args.contains(&"-transpose".to_string()) {
         transpose_value = args[args.iter().position(|r| r == "-transpose").unwrap()+1].parse::<i32>().unwrap();
     }
@@ -142,6 +144,7 @@ fn main() {
     let mut overlap_colors: Vec<Vec<i32>> = vec![Vec::new(); 128];
     let mut overlap_index: Vec<Vec<i32>> = vec![Vec::new(); 128];
 
+    //Functions in a separate thread to make things a bit faster
     let audio_thread = thread::spawn(move || {
         for e in amerged {
             if e.delta() != 0.0 {
@@ -162,6 +165,7 @@ fn main() {
         }
     });
 
+    //The main thread for handling the keyboard
     let thread_1 = thread::spawn(move || {
         let mut keyboard_string = [" "; 128];
         for e in merged {
@@ -206,6 +210,8 @@ fn main() {
                 Event::NoteOff(e) => {
                     let kb_idx = ((e.key+transpose_value as u8)%128) as usize;
                     let n = (e.key as i32 + (transpose_value as i32)) as u8 % 12;
+                    
+                    // For black notes
                     let black_note = n == 1 || n == 3 || n == 6 || n == 8 || n == 10;
                     
                     if experimental_overlaps {
@@ -213,10 +219,13 @@ fn main() {
                         overlap_colors[kb_idx].remove(tmp_pos);
 
                         let mut overlap_colors_len = 0;
+                        
+                        //Has to check if the length of the overlapping colors is greater than 0, otherwise rust will panic
                         if overlap_colors[kb_idx].len() > 0 {
                             overlap_colors_len = overlap_colors[kb_idx].len() - 1;
                         }
 
+                        //Same for here
                         if overlap_colors[kb_idx].len() > 0 {
                             let new_n_idx = overlap_colors[kb_idx][(overlap_colors_len) as usize] as usize;
                             keyboard_string[kb_idx] = note_shades_w[new_n_idx];
@@ -242,6 +251,7 @@ fn main() {
     let keyboard_thread = Arc::clone(&keyboard_string);
     let midi_end = Arc::clone(&midi_ended);
 
+    //This thread functions as the display
     let thread_2 = thread::spawn(move || {
         while !(*midi_end.lock().unwrap()) {
             println!("{}", keyboard_thread.lock().unwrap().join(""));
@@ -249,6 +259,7 @@ fn main() {
         }
     });
 
+    // Finish up the threads when the MIDI is done playing
     audio_thread.join().unwrap();
     thread_1.join().unwrap();
     thread_2.join().unwrap();
