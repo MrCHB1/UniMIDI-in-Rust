@@ -22,7 +22,8 @@ cargo +nightly run <path/to/midi_file.mid>
 [Extra]
 -barfMode (Added just for fun)
 ```
-Example:
+#### Example:
+```
 cargo +nightly run "/Black MIDIs/tau2.5.9.mid" -transpose 10 -randomizeColors true -blackNotes false
 ```
 ### Preview
