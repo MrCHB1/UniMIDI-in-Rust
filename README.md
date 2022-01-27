@@ -3,9 +3,9 @@ A faster version of the OG UniMIDI, which was written in C#.
 
 ### Usage
 
-If you have Cargo and Cargo Nightly installed, then you can head to this directory and type in this command in your console:
+If you have Cargo and Cargo Nightly installed, then you can head to the same directory as the .exe file and type in this command in your console:
 ```
-cargo +nightly run <path/to/midi_file.mid>
+UniMIDI.exe <path/to/midi_file.mid>
 ```
 #### Available Arguments
 ```
@@ -24,7 +24,7 @@ cargo +nightly run <path/to/midi_file.mid>
 ```
 #### Example:
 ```
-cargo +nightly run "/Black MIDIs/tau2.5.9.mid" -transpose 10 -randomizeColors true -blackNotes false
+UniMIDI.exe "/Black MIDIs/tau2.5.9.mid" -transpose 10 -randomizeColors true -blackNotes false
 ```
 ### Preview
 ![preview1](/preview_1.jpg)
