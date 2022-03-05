@@ -12,21 +12,40 @@ use std::sync::{Arc, Mutex};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 
+use crossterm::terminal::*;
+use crossterm::event;
+use crossterm::event::{KeyEvent, KeyCode, KeyModifiers, read};
+
 use kdmapi::KDMAPI;
 
+#[cfg(windows)]
+pub fn enable_virtual_terminal_processing() {
+    use winapi_util::console::Console;
+
+    if let Ok(mut term) = Console::stdout() {
+        let _ = term.set_virtual_terminal_processing(true);
+    }
+
+    if let Ok(mut term) = Console::stderr() {
+        let _ = term.set_virtual_terminal_processing(true);
+    }
+}
+
 fn main() {
-    //Get the list of arguments the user has included
+    #[cfg(windows)]
+    enable_virtual_terminal_processing();
+
     let args: Vec<String> = env::args().collect();
+
+    enable_raw_mode().unwrap();
 
     println!("Loading MIDI...");
 
-    //Load the MIDI file and PPQ
     let file = MIDIFile::open_in_ram(&args[1], None).unwrap();
     let file2 = MIDIFile::open_in_ram(&args[1], None).unwrap();
     let ppq = file.ppq();
     let ppq2 = file2.ppq();
 
-    //Set default values for argument settings
     let mut transpose_value: i32 = 0;
     let mut playback_speed: f64 = 1.0;
     let mut randomize_colors = false;
@@ -35,9 +54,10 @@ fn main() {
     let mut note_size = 5;
     let mut experimental_overlaps = false;
 
+    let mut use_colors = true;
+
     let mut color_index = [0,1,2,3,4,5,6,7];
    
-    //Check if the argument list contains these
     if args.contains(&"-transpose".to_string()) {
         transpose_value = args[args.iter().position(|r| r == "-transpose").unwrap()+1].parse::<i32>().unwrap();
     }
@@ -65,6 +85,10 @@ fn main() {
     if args.contains(&"-experimentalOverlaps".to_string()) {
         experimental_overlaps = true;
         println!("\x1b[38;2;255;32;32mWARNING: UniMIDI will run slower with 'experimentalOverlaps'.\x1b[0m");
+    }
+
+    if args.contains(&"-noColors".to_string()) {
+        use_colors = false;
     }
 
     if randomize_colors {
@@ -110,15 +134,6 @@ fn main() {
 
     let keyboard_string: Arc<Mutex<[&str]>> = Arc::new(Mutex::new([" "; 128]));
 
-    let now = Instant::now();
-    let mut time = 0.0;
-    let mut atime = 0.0;
-
-    let midi_ended = Arc::new(Mutex::new(false));
-
-    let keyboard_thread = Arc::clone(&keyboard_string);
-    let midi_end = Arc::clone(&midi_ended);
-
     let kdmapi = KDMAPI.open_stream();
 
     //let crossterm = Crossterm::new();
@@ -144,12 +159,31 @@ fn main() {
     let mut overlap_colors: Vec<Vec<i32>> = vec![Vec::new(); 128];
     let mut overlap_index: Vec<Vec<i32>> = vec![Vec::new(); 128];
 
-    //Functions in a separate thread to make things a bit faster
+    let now = Instant::now();
+
+    let mut time = 0.0;
+    let mut atime = 0.0;
+
+    let midi_ended = Arc::new(Mutex::new(false));
+    let skip_length = Arc::new(Mutex::new(0.0));
+    let paused = Arc::new(Mutex::new(false));
+
+    let keyboard_thread = Arc::clone(&keyboard_string);
+    let midi_end = Arc::clone(&midi_ended);
+    let skip_len = Arc::clone(&skip_length);
+    let paused_midi = Arc::clone(&paused);
+
     let audio_thread = thread::spawn(move || {
         for e in amerged {
             if e.delta() != 0.0 {
+                {
+                    while *paused_midi.lock().unwrap() {
+                        thread::sleep(time::Duration::from_secs_f64(0.1));
+                    }
+                }
+
                 atime += e.delta();
-                let diff = atime - now.elapsed().as_secs_f64();
+                let diff = atime - (now.elapsed().as_secs_f64()-(*skip_len.lock().unwrap()));
                 
                 if diff > 0.0 {
                     spin_sleep::sleep(time::Duration::from_secs_f64(diff));
@@ -165,7 +199,9 @@ fn main() {
         }
     });
 
-    //The main thread for handling the keyboard
+    let paused_midi = Arc::clone(&paused);
+    let skip_len = Arc::clone(&skip_length);
+
     let thread_1 = thread::spawn(move || {
         let mut keyboard_string = [" "; 128];
         for e in merged {
@@ -176,8 +212,17 @@ fn main() {
                         ks[(i+transpose_value as usize)%128] = keyboard_string[(i+transpose_value as usize)%128];
                     }
                 }
+
+                {
+                    while *paused_midi.lock().unwrap() {
+                        thread::sleep(time::Duration::from_secs_f64(0.1));
+                        let mut skip_l = skip_len.lock().unwrap();
+                        *skip_l += 0.1;
+                    }
+                }
+
                 time += e.delta();
-                let diff = time - now.elapsed().as_secs_f64();
+                let diff = time - (now.elapsed().as_secs_f64()-(*skip_len.lock().unwrap()));
                 
                 if diff > 0.0 {
                     spin_sleep::sleep(time::Duration::from_secs_f64(diff));
@@ -196,9 +241,13 @@ fn main() {
                     let kb_idx = ((e.key+transpose_value as u8)%128) as usize;
                     let n_idx = (e.channel % 8) as usize;
 
-                    keyboard_string[kb_idx] = note_shades_w[n_idx];
-                    if black_note && allow_black_notes {
-                        keyboard_string[kb_idx] = note_shades_b[n_idx];
+                    if use_colors {
+                        keyboard_string[kb_idx] = note_shades_w[n_idx];
+                        if black_note && allow_black_notes {
+                            keyboard_string[kb_idx] = note_shades_b[n_idx];
+                        }
+                    } else {
+                        keyboard_string[kb_idx] = ["`",".",",","!","#","&","$","@"][n_idx];
                     }
 
                     if experimental_overlaps {
@@ -210,8 +259,6 @@ fn main() {
                 Event::NoteOff(e) => {
                     let kb_idx = ((e.key+transpose_value as u8)%128) as usize;
                     let n = (e.key as i32 + (transpose_value as i32)) as u8 % 12;
-                    
-                    // For black notes
                     let black_note = n == 1 || n == 3 || n == 6 || n == 8 || n == 10;
                     
                     if experimental_overlaps {
@@ -219,18 +266,19 @@ fn main() {
                         overlap_colors[kb_idx].remove(tmp_pos);
 
                         let mut overlap_colors_len = 0;
-                        
-                        //Has to check if the length of the overlapping colors is greater than 0, otherwise rust will panic
                         if overlap_colors[kb_idx].len() > 0 {
                             overlap_colors_len = overlap_colors[kb_idx].len() - 1;
                         }
 
-                        //Same for here
                         if overlap_colors[kb_idx].len() > 0 {
                             let new_n_idx = overlap_colors[kb_idx][(overlap_colors_len) as usize] as usize;
-                            keyboard_string[kb_idx] = note_shades_w[new_n_idx];
-                            if black_note && allow_black_notes {
-                                keyboard_string[kb_idx] = note_shades_b[new_n_idx];
+                            if use_colors {
+                                keyboard_string[kb_idx] = note_shades_w[new_n_idx];
+                                if black_note && allow_black_notes {
+                                    keyboard_string[kb_idx] = note_shades_b[new_n_idx];
+                                }
+                            } else {
+                                keyboard_string[kb_idx] = ["`",".",",","!","#","&","$","@"][new_n_idx];
                             }
                         }
                     }
@@ -246,21 +294,50 @@ fn main() {
 
         let mut mid_end = midi_end.lock().unwrap();
         *mid_end = true;
+        std::process::exit(0);
     });
 
     let keyboard_thread = Arc::clone(&keyboard_string);
     let midi_end = Arc::clone(&midi_ended);
+    let paused_midi = Arc::clone(&paused);
 
-    //This thread functions as the display
     let thread_2 = thread::spawn(move || {
         while !(*midi_end.lock().unwrap()) {
             println!("{}", keyboard_thread.lock().unwrap().join(""));
             thread::sleep(time::Duration::from_millis(((note_size as f64)/playback_speed) as u64));
+            {
+                while *paused_midi.lock().unwrap() {
+                    thread::sleep(time::Duration::from_secs_f64(0.1));
+                }
+            }
         }
     });
 
-    // Finish up the threads when the MIDI is done playing
+    let midi_end = Arc::clone(&midi_ended);
+    let paused_midi = Arc::clone(&paused);
+
+    let pauser = thread::spawn(move || {
+        let no_modifiers = KeyModifiers::empty();
+        while !(*midi_end.lock().unwrap()) {
+            match read().unwrap() {
+                event::Event::Key(KeyEvent {
+                    code: KeyCode::Char('p'),
+                    modifiers: no_modifiers,
+                }) => {
+                    {
+                        let mut psd = paused_midi.lock().unwrap();
+                        *psd = !*psd;
+                    }
+                },
+                _ => (),
+            }
+        }
+    });
+
     audio_thread.join().unwrap();
     thread_1.join().unwrap();
     thread_2.join().unwrap();
+    pauser.join().unwrap();
+
+    disable_raw_mode().unwrap();
 }
