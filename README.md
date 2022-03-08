@@ -14,6 +14,7 @@ UniMIDI.exe <path/to/midi_file.mid>
 -noteSpeed N (can have decimals, must be greater than 0)
 -blackNotes <true/false>
 -experimentalOverlaps (Warning: This will greatly reduce the performance of UniMIDI)
+-colorPalette N (0, 1, or 2. Anything greater than 2 would wrap back to 0.)
 
 [Audio]
 -playbackSpeed N (can have decimals, must be greater than 0)
