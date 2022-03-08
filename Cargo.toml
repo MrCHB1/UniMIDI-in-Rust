@@ -11,5 +11,10 @@ stopwatch = { git = "https://github.com/ellisonch/rust-stopwatch.git" }
 spin_sleep = { git = "https://github.com/alexheretic/spin-sleep" }
 libloading = "0.5"
 kdmapi = { git = "https://github.com/arduano/kdmapi" }
-crossterm = "0.5.0"
+crossterm = "0.16.0"
 rand = "0.8"
+wfd = "0.1.7"
+colored = "2"
+
+[target.'cfg(windows)'.dependencies]
+winapi-util = "0.1"
